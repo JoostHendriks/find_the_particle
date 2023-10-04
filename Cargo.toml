@@ -1,0 +1,9 @@
+[package]
+name = "find_the_particle"
+version = "0.1.0"
+edition = "2021"
+authors = ["Joost Hendriks jhendriks@luoautomation.com"]
+
+[dependencies]
+ggez = "0.9.3"
+rand = "0.8.4"
