@@ -22,10 +22,21 @@ struct MainState {
     coords: Vec2,
     mouse_down: bool,
     particles_found: i32,
+    hit_spin: bool,
+    spin_counter: i32,
+    particle_color: f32,
+    particle_size: f32,
+    particle_opacity: f32,
 }
 
 const WIDTH: f32 = 800.0;
 const HEIGHT: f32 = 800.0;
+
+const X_MIN: f32 = WIDTH/2.0 - 45.0;
+const X_MAX: f32 = WIDTH/2.0 + 45.0;
+const Y_MIN: f32 = HEIGHT/2.0 - 130.0;
+const Y_MAX: f32 = HEIGHT/2.0 + 185.0;
+
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
@@ -35,9 +46,14 @@ impl MainState {
             dt: std::time::Duration::new(0, 0), 
             fps: 0.0,
             image1,
-            coords: coord_gen(355.0, 445.0, 270.0, 585.0),
+            coords: Vec2::new(rand_coord_gen_low(X_MIN, X_MAX), Y_MAX),
             mouse_down: false,
             particles_found: 0,
+            hit_spin: false,
+            spin_counter: 0,
+            particle_color: rand_double(),
+            particle_size: rand_double(),
+            particle_opacity: rand_double(),
             };
         Ok(s)
     }
@@ -47,6 +63,19 @@ impl ggez::event::EventHandler<GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         self.dt = ctx.time.delta();
         self.fps = ctx.time.fps();
+
+        if self.hit_spin {
+            self.coords = rand_coord_gen(X_MIN, X_MAX, Y_MIN, Y_MAX);
+            self.spin_counter += 1;
+        }
+
+        if self.spin_counter >= 100 {
+            self.coords.y = self.coords.y + 1.0;
+            self.hit_spin = false;
+            if self.coords.y >= Y_MAX - 2.0 {
+                self.spin_counter = 0;
+            }
+        }
         Ok(())
     }
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
@@ -58,28 +87,27 @@ impl ggez::event::EventHandler<GameError> for MainState {
         let rectangle = graphics::Mesh::new_rounded_rectangle(
             ctx,
             graphics::DrawMode::fill(),
-            graphics::Rect::new(200.0, 40.0, 400.0, 700.0),
+            graphics::Rect::new(-200.0, -350.0, 400.0, 700.0),
             25.0,
             Color::WHITE,
         )?;
-        canvas.draw(&rectangle, Vec2::new(0.0,0.0));
+        canvas.draw(&rectangle, Vec2::new(WIDTH/2.0,HEIGHT/2.0));
 
         canvas.draw(
             graphics::Text::new(format!("Frame rate = {}ms {}Hz", self.dt.as_millis(), self.fps.round()))
                 .set_scale(12.),
-                Vec2::new(600.0,780.0),
+                Vec2::new(WIDTH-200.0,HEIGHT-20.0),
         );
 
-        let dst = ggez::glam::Vec2::new(220.0, 50.0);
-        canvas.draw(&self.image1, graphics::DrawParam::new().dest(dst));
+        canvas.draw(&self.image1, Vec2::new(WIDTH/2.0-180.0, HEIGHT/2.0-350.0));
 
         let particle = graphics::Mesh::new_circle(
             ctx,
             graphics::DrawMode::fill(),
             vec2(0., 0.),
-            2.0,
+            self.particle_size / 4.0 + 1.0,
             1.0,
-            Color::BLACK,
+            Color::from([self.particle_color, self.particle_color, self.particle_color, self.particle_opacity/2.0+0.3]),
         )?;
         canvas.draw(&particle, self.coords);
 
@@ -89,6 +117,21 @@ impl ggez::event::EventHandler<GameError> for MainState {
                 .set_scale(24.),
                 Vec2::new(5.0, 5.0),
         );
+        // Draw button
+        let rectangle_button = graphics::Mesh::new_rectangle(
+            ctx,
+            graphics::DrawMode::stroke(1.0),
+            graphics::Rect::new(-292.0, -302.0, 57.0, 28.0),
+            Color::WHITE,
+        )?;
+        canvas.draw(&rectangle_button, Vec2::new(WIDTH/2.0,HEIGHT/2.0));
+
+        canvas.draw(
+            graphics::Text::new(format!("Spin"))
+                .set_scale(24.),
+                Vec2::new(WIDTH/2.0-290.0, HEIGHT/2.0-300.0),
+        );
+        // Draw text
         let mut text: &str = " ";
         match self.particles_found {
             1 => text = "Good busy!",
@@ -98,7 +141,7 @@ impl ggez::event::EventHandler<GameError> for MainState {
         }
         canvas.draw( graphics::Text::new(format!("{}", text))
             .set_scale(24.),
-            Vec2::new(200.0, 750.0),
+            Vec2::new(WIDTH/2.0-200.0, HEIGHT/2.0+360.0),
         );
 
         canvas.finish(ctx)?;
@@ -112,28 +155,47 @@ impl ggez::event::EventHandler<GameError> for MainState {
         y: f32,
     ) -> GameResult {
         self.mouse_down = true;
-        let margin = 5.0;
-        let hit = check_coords(self.coords.x, self.coords.y, x, y, margin);
-        if hit {
-            self.coords = coord_gen(355.0, 445.0, 270.0, 585.0);
+        let margin_particle_x = 5.0;
+        let margin_particle_y = 5.0;
+        let hit_particle = check_coords(self.coords.x, self.coords.y, x, y, margin_particle_x, margin_particle_y);
+        let spin_button_hit = check_coords(WIDTH/2.0-292.0+57.0/2.0, HEIGHT/2.0-302.0+16.0, x, y, 57.0/2.0,14.0);
+        if hit_particle {
+            self.coords = Vec2::new(rand_coord_gen_low(X_MIN, X_MAX), Y_MAX);
+            self.particle_color = rand_double();
+            self.particle_size = rand_double();
+            self.particle_opacity = rand_double();
             self.particles_found += 1;
+        } else if spin_button_hit {
+            println!("Spin button hit");
+            self.hit_spin = true;
         }
         Ok(())
     }
 }
 
-fn coord_gen(x_min:f32, x_max:f32, y_min:f32, y_max:f32) -> Vec2 {
+fn rand_coord_gen(x_min:f32, x_max:f32, y_min:f32, y_max:f32) -> Vec2 {
     let mut rng = rand::thread_rng();
     let x_pos = rng.gen_range(x_min..x_max);
     let y_pos = rng.gen_range(y_min..y_max);
-    Vec2::new(x_pos,y_pos)
+    Vec2::new(x_pos, y_pos)
 }
 
-fn check_coords(point_x: f32, point_y: f32, mouse_x: f32, mouse_y: f32, margin: f32) -> bool {
-    let lower_x = point_x - margin;
-    let upper_x = point_x + margin;
-    let lower_y = point_y - margin;
-    let upper_y = point_y + margin;
+fn rand_coord_gen_low(x_min:f32, x_max:f32) -> f32 {
+    let mut rng = rand::thread_rng();
+    let x_pos = rng.gen_range(x_min..x_max);
+    return x_pos;
+}
+
+fn rand_double() -> f32 {
+    let mut rng = rand::thread_rng();
+    rng.gen_range(0.0..1.0)
+}
+
+fn check_coords(point_x: f32, point_y: f32, mouse_x: f32, mouse_y: f32, margin_x: f32, margin_y: f32) -> bool {
+    let lower_x = point_x - margin_x;
+    let upper_x = point_x + margin_x;
+    let lower_y = point_y - margin_y;
+    let upper_y = point_y + margin_y;
     return mouse_x > lower_x && mouse_x < upper_x && mouse_y > lower_y && mouse_y < upper_y;
 }
 pub fn main() -> GameResult {
