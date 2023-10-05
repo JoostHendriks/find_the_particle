@@ -15,6 +15,12 @@ extern crate rand;
 
 use rand::Rng;
 
+struct Particle {
+    color: f32,
+    size: f32,
+    opacity: f32,
+}
+
 struct MainState {
     dt: std::time::Duration,
     fps: f64,
@@ -24,9 +30,7 @@ struct MainState {
     particles_found: i32,
     hit_spin: bool,
     spin_counter: i32,
-    particle_color: f32,
-    particle_size: f32,
-    particle_opacity: f32,
+    particle: Particle,
 }
 
 const WIDTH: f32 = 800.0;
@@ -42,6 +46,7 @@ impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let image1 = graphics::Image::from_path(ctx, "/syringe.png")?;
 
+
         let s = MainState { 
             dt: std::time::Duration::new(0, 0), 
             fps: 0.0,
@@ -51,9 +56,11 @@ impl MainState {
             particles_found: 0,
             hit_spin: false,
             spin_counter: 0,
-            particle_color: rand_double(),
-            particle_size: rand_double(),
-            particle_opacity: rand_double(),
+            particle: Particle {
+                color: rand_double(),
+                size: rand_double(),
+                opacity: rand_double(),
+                },
             };
         Ok(s)
     }
@@ -105,9 +112,9 @@ impl ggez::event::EventHandler<GameError> for MainState {
             ctx,
             graphics::DrawMode::fill(),
             vec2(0., 0.),
-            self.particle_size / 4.0 + 1.0,
+            self.particle.size / 4.0 + 1.0,
             1.0,
-            Color::from([self.particle_color, self.particle_color, self.particle_color, self.particle_opacity/2.0+0.3]),
+            Color::from([self.particle.color, self.particle.color, self.particle.color, self.particle.opacity/2.0+0.3]),
         )?;
         canvas.draw(&particle, self.coords);
 
@@ -161,9 +168,9 @@ impl ggez::event::EventHandler<GameError> for MainState {
         let spin_button_hit = check_coords(WIDTH/2.0-292.0+57.0/2.0, HEIGHT/2.0-302.0+16.0, x, y, 57.0/2.0,14.0);
         if hit_particle {
             self.coords = Vec2::new(rand_coord_gen_low(X_MIN, X_MAX), Y_MAX);
-            self.particle_color = rand_double();
-            self.particle_size = rand_double();
-            self.particle_opacity = rand_double();
+            self.particle.color = rand_double();
+            self.particle.size = rand_double();
+            self.particle.opacity = rand_double();
             self.particles_found += 1;
         } else if spin_button_hit {
             println!("Spin button hit");
