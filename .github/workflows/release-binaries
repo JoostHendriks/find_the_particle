@@ -10,18 +10,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  linux-x86_64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Build binary
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target x86_64-unknown-linux-musl
-          use-cross: true
-
   macos-x86_64:
     runs-on: macos-latest
     steps:
