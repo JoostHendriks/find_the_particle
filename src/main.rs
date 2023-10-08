@@ -7,9 +7,11 @@ use ggez::{
     GameResult,
     GameError,
     ContextBuilder,
-    conf::WindowSetup
+    conf::WindowSetup,
 };
+
 use std::{env, path};
+use std::time::Duration;
 
 extern crate rand;
 
@@ -22,8 +24,10 @@ struct Particle {
 }
 
 struct MainState {
-    dt: std::time::Duration,
+    dt: f64,
     fps: f64,
+    time: Duration,
+    countdown_timer: i32,
     image1: graphics::Image,
     coords: Vec2,
     mouse_down: bool,
@@ -31,6 +35,7 @@ struct MainState {
     hit_spin: bool,
     spin_counter: i32,
     particle: Particle,
+    game_over: bool,
 }
 
 const WIDTH: f32 = 800.0;
@@ -40,6 +45,7 @@ const X_MIN: f32 = WIDTH/2.0 - 45.0;
 const X_MAX: f32 = WIDTH/2.0 + 45.0;
 const Y_MIN: f32 = HEIGHT/2.0 - 130.0;
 const Y_MAX: f32 = HEIGHT/2.0 + 185.0;
+const START_TIME: i32 = 5;
 
 
 impl MainState {
@@ -48,8 +54,10 @@ impl MainState {
 
 
         let s = MainState { 
-            dt: std::time::Duration::new(0, 0), 
+            dt: 0.0, 
             fps: 0.0,
+            time: Duration::new(0, 0),
+            countdown_timer: START_TIME,
             image1,
             coords: Vec2::new(rand_coord_gen_low(X_MIN, X_MAX), Y_MAX),
             mouse_down: false,
@@ -61,6 +69,7 @@ impl MainState {
                 size: rand_double(),
                 opacity: rand_double(),
                 },
+            game_over: false,
             };
         Ok(s)
     }
@@ -68,20 +77,30 @@ impl MainState {
 
 impl ggez::event::EventHandler<GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        self.dt = ctx.time.delta();
+        self.dt += ctx.time.delta().as_secs_f64();
         self.fps = ctx.time.fps();
+        self.time = ctx.time.time_since_start();
 
         if self.hit_spin {
             self.coords = rand_coord_gen(X_MIN, X_MAX, Y_MIN, Y_MAX);
             self.spin_counter += 1;
         }
 
-        if self.spin_counter >= 100 {
+        if self.spin_counter >= 50 {
             self.coords.y = self.coords.y + 1.0;
             self.hit_spin = false;
             if self.coords.y >= Y_MAX - 2.0 {
                 self.spin_counter = 0;
             }
+        }
+
+        if self.countdown_timer > 0 {
+            if self.dt > 1.0 {
+                self.countdown_timer -= 1;
+                self.dt = 0.0;
+            }
+        } else if self.countdown_timer == 0 {
+            self.game_over = true;
         }
         Ok(())
     }
@@ -100,19 +119,21 @@ impl ggez::event::EventHandler<GameError> for MainState {
         )?;
         canvas.draw(&rectangle, Vec2::new(WIDTH/2.0,HEIGHT/2.0));
 
+        // Duration text
         canvas.draw(
-            graphics::Text::new(format!("Frame rate = {}ms {}Hz", self.dt.as_millis(), self.fps.round()))
+            graphics::Text::new(format!("Duration {} seconds", self.time.as_secs()))
                 .set_scale(12.),
-                Vec2::new(WIDTH-200.0,HEIGHT-20.0),
+                Vec2::new(WIDTH-150.0,HEIGHT-20.0),
         );
 
         canvas.draw(&self.image1, Vec2::new(WIDTH/2.0-180.0, HEIGHT/2.0-350.0));
 
+        // Draw particle
         let particle = graphics::Mesh::new_circle(
             ctx,
             graphics::DrawMode::fill(),
             vec2(0., 0.),
-            self.particle.size / 4.0 + 1.0,
+            self.particle.size * 3.0 + 1.0,
             1.0,
             Color::from([self.particle.color, self.particle.color, self.particle.color, self.particle.opacity/2.0+0.3]),
         )?;
@@ -124,7 +145,15 @@ impl ggez::event::EventHandler<GameError> for MainState {
                 .set_scale(24.),
                 Vec2::new(5.0, 5.0),
         );
-        // Draw button
+
+        // Draw countdown
+        canvas.draw(
+            graphics::Text::new(format!("Time left {}", self.countdown_timer))
+                .set_scale(24.),
+                Vec2::new(WIDTH-200.0, 5.0),
+        );
+
+        // Draw spin button
         let rectangle_button = graphics::Mesh::new_rectangle(
             ctx,
             graphics::DrawMode::stroke(1.0),
@@ -138,13 +167,36 @@ impl ggez::event::EventHandler<GameError> for MainState {
                 .set_scale(24.),
                 Vec2::new(WIDTH/2.0-290.0, HEIGHT/2.0-300.0),
         );
+
+        // Draw reset button if game over
+        if self.game_over {
+            let rectangle_button = graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::stroke(1.0),
+                graphics::Rect::new(110.0, 360.0, 72.0, 28.0),
+                Color::WHITE,
+            )?;
+            canvas.draw(&rectangle_button, Vec2::new(WIDTH/2.0,HEIGHT/2.0));
+    
+            canvas.draw(
+                graphics::Text::new(format!("Reset"))
+                    .set_scale(24.),
+                    Vec2::new(WIDTH/2.0+115.0, HEIGHT/2.0+363.0),
+            );
+        }
+
         // Draw text
         let mut text: &str = " ";
-        match self.particles_found {
-            1 => text = "Good busy!",
-            5 => text = "5 particles found already!",
-            10 => text = "10 found! I would ask Joren for a raise",
-            _ => (),
+        if !self.game_over {
+            match self.particles_found {
+                1 => text = "Good busy!",
+                5 => text = "5 particles found already!",
+                10 => text = "10 found! You are a real pro",
+                25 => text = "25 found! I would consider a career switch",
+                _ => (),
+            }
+        } else if self.game_over {
+            text = "Game over..."
         }
         canvas.draw( graphics::Text::new(format!("{}", text))
             .set_scale(24.),
@@ -165,16 +217,22 @@ impl ggez::event::EventHandler<GameError> for MainState {
         let margin_particle_x = 5.0;
         let margin_particle_y = 5.0;
         let hit_particle = check_coords(self.coords.x, self.coords.y, x, y, margin_particle_x, margin_particle_y);
-        let spin_button_hit = check_coords(WIDTH/2.0-292.0+57.0/2.0, HEIGHT/2.0-302.0+16.0, x, y, 57.0/2.0,14.0);
+        let spin_button_hit = check_coords(WIDTH/2.0-292.0+57.0/2.0, HEIGHT/2.0-302.0+14.0, x, y, 57.0/2.0,14.0);
+        let reset_button_hit = check_coords(WIDTH/2.0+115.0+72.0/2.0, HEIGHT/2.0+360.0+14.0, x, y, 72.0/2.0,14.0);
         if hit_particle {
             self.coords = Vec2::new(rand_coord_gen_low(X_MIN, X_MAX), Y_MAX);
-            self.particle.color = rand_double();
-            self.particle.size = rand_double();
-            self.particle.opacity = rand_double();
+            new_particle(self);
             self.particles_found += 1;
+            self.time = Duration::ZERO;
+            self.countdown_timer += 3;
         } else if spin_button_hit {
             println!("Spin button hit");
             self.hit_spin = true;
+        } else if self.game_over && reset_button_hit {
+            self.game_over = false;
+            self.particles_found = 0;
+            self.countdown_timer = START_TIME;
+            new_particle(self);
         }
         Ok(())
     }
@@ -205,6 +263,13 @@ fn check_coords(point_x: f32, point_y: f32, mouse_x: f32, mouse_y: f32, margin_x
     let upper_y = point_y + margin_y;
     return mouse_x > lower_x && mouse_x < upper_x && mouse_y > lower_y && mouse_y < upper_y;
 }
+
+fn new_particle(game: &mut MainState) {
+    game.particle.color = rand_double();
+    game.particle.size = rand_double();
+    game.particle.opacity = rand_double();
+}
+
 pub fn main() -> GameResult {
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = path::PathBuf::from(manifest_dir);
