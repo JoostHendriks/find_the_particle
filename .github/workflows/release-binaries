@@ -1,0 +1,35 @@
+name: release-binaries
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  macos-x86_64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+          use-cross: true
+
+  windows-x86_64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+          use-cross: true
